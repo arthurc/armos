@@ -136,7 +136,7 @@ where
         let vtx_count = r.read_u16()?;
         let transform_count = r.read_u16()?;
         let unk_4 = r.read_u16()?;
-        let _ = r.read_u16()?;
+        let _ = r.read_u16()?; // Padding
         let skin_vertices = r.read_u32()?;
         let limb_transformations = r.read_u32()?;
 
