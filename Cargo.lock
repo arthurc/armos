@@ -121,6 +121,7 @@ name = "extract-assets"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "byteorder",
  "glob",
  "gltf",
  "log",
