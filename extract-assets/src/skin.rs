@@ -1,10 +1,11 @@
+pub mod gltf;
+
+use crate::rom::{ReadSegment, RomReader};
+use anyhow::Result;
 use std::{
     fmt::Debug,
     io::{self, Read, Seek},
 };
-
-use crate::rom::{ReadSegment, RomReader};
-use anyhow::Result;
 
 #[derive(Debug)]
 pub struct SkeletonHeader {
@@ -74,10 +75,10 @@ impl Debug for SkinLimb {
     }
 }
 
-#[derive(Debug)]
 pub struct SkinAnimatedLimbData {
     total_vtx_count: u16,
     limb_modifications: Vec<SkinLimbModif>,
+    dlist: u32,
 }
 impl<R> ReadSegment<R> for SkinAnimatedLimbData
 where
@@ -92,6 +93,7 @@ where
         let total_vtx_count = r.read_u16()?;
         let limb_modif_count = r.read_u16()?;
         let limb_modifications = r.read_u32()?;
+        let dlist = r.read_u32()?;
 
         Ok(Self {
             total_vtx_count,
@@ -99,16 +101,27 @@ where
                 .segment_iter(limb_modifications)
                 .take(limb_modif_count as _)
                 .collect::<io::Result<_>>()?,
+            dlist,
         })
     }
 }
+impl Debug for SkinAnimatedLimbData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SkinAnimatedLimbData")
+            .field("total_vtx_count", &self.total_vtx_count)
+            .field("limb_modifications", &self.limb_modifications)
+            .field("dlist", &format_args!("0x{:08X}", self.dlist))
+            .finish()
+    }
+}
 
+#[derive(Debug)]
 pub struct SkinLimbModif {
     vtx_count: u16,
     transform_count: u16,
     unk_4: u16,
     skin_vertices: Vec<SkinVertex>,
-    limb_transformations: u32,
+    limb_transformations: Vec<SkinTransformation>,
 }
 impl<R> ReadSegment<R> for SkinLimbModif
 where
@@ -135,30 +148,21 @@ where
                 .segment_iter(skin_vertices)
                 .take(vtx_count as _)
                 .collect::<io::Result<_>>()?,
-            limb_transformations,
+            limb_transformations: r
+                .segment_iter(limb_transformations)
+                .take(transform_count as _)
+                .collect::<io::Result<_>>()?,
         })
-    }
-}
-impl Debug for SkinLimbModif {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SkinLimbModif")
-            .field("vtx_count", &self.vtx_count)
-            .field("transform_count", &self.transform_count)
-            .field("unk_4", &self.unk_4)
-            .field("skin_vertices", &self.skin_vertices)
-            .field(
-                "limb_transformations",
-                &format_args!("0x{:08X}", self.limb_transformations),
-            )
-            .finish()
     }
 }
 
 #[derive(Debug)]
 struct SkinVertex {
     index: u16,
-    pos: [i16; 3],
-    scale: u8,
+    s: i16,
+    t: i16,
+    norm: [i8; 3],
+    alpha: u8,
 }
 impl<R> ReadSegment<R> for SkinVertex
 where
@@ -172,8 +176,39 @@ where
     {
         Ok(Self {
             index: r.read_u16()?,
-            pos: [r.read_i16()?, r.read_i16()?, r.read_i16()?],
-            scale: r.read_u8()?,
+            s: r.read_i16()?,
+            t: r.read_i16()?,
+            norm: [r.read_i8()?, r.read_i8()?, r.read_i8()?],
+            alpha: r.read_u8()?,
+        })
+    }
+}
+
+#[derive(Debug)]
+struct SkinTransformation {
+    limb_index: u8,
+    pos: [i16; 3],
+    scale: u8,
+}
+impl<R> ReadSegment<R> for SkinTransformation
+where
+    R: Read,
+{
+    const SIZE: usize = 0xA;
+
+    fn read(r: &mut RomReader<R>) -> io::Result<Self>
+    where
+        Self: Sized,
+    {
+        let limb_index = r.read_u8()?;
+        let _ = r.read_u8()?; // Padding
+        let pos = [r.read_i16()?, r.read_i16()?, r.read_i16()?];
+        let scale = r.read_u8()?;
+
+        Ok(Self {
+            limb_index,
+            pos,
+            scale,
         })
     }
 }

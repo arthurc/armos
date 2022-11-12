@@ -80,6 +80,10 @@ where
         self.r.read_u32::<E>()
     }
 
+    pub fn read_i8(&mut self) -> io::Result<i8> {
+        self.r.read_i8()
+    }
+
     pub fn read_i16(&mut self) -> io::Result<i16> {
         self.r.read_i16::<E>()
     }
