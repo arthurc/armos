@@ -16,7 +16,11 @@ fn main() -> Result<()> {
     reader.seek(0x06009D74)?;
 
     let skeleton_header = SkeletonHeader::read(&mut reader)?;
-    println!("{:?}", skeleton_header);
+    dbg!(&skeleton_header);
+
+    let root = skin::gltf::gltf_from_skeleton(&skeleton_header);
+    let writer = fs::File::create("skeleton.gltf").expect("I/O error");
+    gltf::json::serialize::to_writer_pretty(writer, &root).expect("Serialization error");
 
     Ok(())
 }

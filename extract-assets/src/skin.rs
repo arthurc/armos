@@ -117,8 +117,6 @@ impl Debug for SkinAnimatedLimbData {
 
 #[derive(Debug)]
 pub struct SkinLimbModif {
-    vtx_count: u16,
-    transform_count: u16,
     unk_4: u16,
     skin_vertices: Vec<SkinVertex>,
     limb_transformations: Vec<SkinTransformation>,
@@ -141,8 +139,6 @@ where
         let limb_transformations = r.read_u32()?;
 
         Ok(Self {
-            vtx_count,
-            transform_count,
             unk_4,
             skin_vertices: r
                 .segment_iter(skin_vertices)
