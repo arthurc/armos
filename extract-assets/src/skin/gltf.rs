@@ -14,10 +14,7 @@ struct Vtx {
     pos: [i16; 3],
 }
 
-pub fn gltf_from_skeleton<R>(header: &SkeletonHeader, r: &mut RomReader<R>) -> Result<json::Root>
-where
-    R: Read + Seek,
-{
+pub fn gltf_from_skeleton(header: &SkeletonHeader, r: &mut RomReader) -> Result<json::Root> {
     let mut meshes = Vec::new();
     let mut accessors = Vec::new();
     let mut buffers = Vec::new();
@@ -55,7 +52,8 @@ where
                 }
             }
 
-            let _ = r.seek(animated_limb.dlist as _)?;
+            r.seek(animated_limb.dlist as _);
+            // r.set_segment(Segment::IconItemStatic, )
             for_each_instr(r, |opcode, data| match opcode {
                 Opcode::VTX => {
                     let nn = ((data & 0x000FF00000000000u64) >> 44) as u32;

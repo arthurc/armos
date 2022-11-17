@@ -2,17 +2,14 @@ pub mod gltf;
 
 use crate::rom::{ReadSegment, RomReader};
 use anyhow::Result;
-use std::{
-    fmt::Debug,
-    io::{self, Read, Seek},
-};
+use std::fmt::Debug;
 
 #[derive(Debug)]
 pub struct SkeletonHeader {
     limbs: Vec<SkinLimb>,
 }
 impl SkeletonHeader {
-    pub fn read(r: &mut RomReader<impl Read + Seek>) -> Result<Self> {
+    pub fn read(r: &mut RomReader) -> Result<Self> {
         let segment = r.read_u32()?;
         let limb_count = r.read_u8()?;
 
@@ -22,7 +19,7 @@ impl SkeletonHeader {
             limbs: r
                 .ptr_segment_iter(segment)
                 .take(limb_count as usize)
-                .collect::<io::Result<_>>()?,
+                .collect::<Result<_>>()?,
         })
     }
 }
@@ -35,20 +32,17 @@ pub struct SkinLimb {
     segment_type: i32,
     animated_limb: Option<SkinAnimatedLimbData>,
 }
-impl<R> ReadSegment<R> for SkinLimb
-where
-    R: Read + Seek,
-{
-    const SIZE: usize = 0x10;
+impl ReadSegment for SkinLimb {
+    const SIZE: u32 = 0x10;
 
-    fn read(r: &mut RomReader<R>) -> io::Result<Self> {
+    fn read(r: &mut RomReader) -> Result<Self> {
         let joint_pos = [r.read_i16()?, r.read_i16()?, r.read_i16()?];
         let child = r.read_u8()?;
         let sibling = r.read_u8()?;
         let segment_type = r.read_i32()?;
         let segment = r.read_u32()?;
         let animated_limb = if segment_type == 4 && segment != 0 {
-            r.seek(segment as _)?;
+            r.seek(segment as _);
             Some(r.read_segment::<SkinAnimatedLimbData>()?)
         } else {
             None
@@ -80,13 +74,10 @@ pub struct SkinAnimatedLimbData {
     limb_modifications: Vec<SkinLimbModif>,
     dlist: u32,
 }
-impl<R> ReadSegment<R> for SkinAnimatedLimbData
-where
-    R: Read + Seek,
-{
-    const SIZE: usize = 0xC;
+impl ReadSegment for SkinAnimatedLimbData {
+    const SIZE: u32 = 0xC;
 
-    fn read(r: &mut RomReader<R>) -> io::Result<Self>
+    fn read(r: &mut RomReader) -> Result<Self>
     where
         Self: Sized,
     {
@@ -100,7 +91,7 @@ where
             limb_modifications: r
                 .segment_iter(limb_modifications)
                 .take(limb_modif_count as _)
-                .collect::<io::Result<_>>()?,
+                .collect::<Result<_>>()?,
             dlist,
         })
     }
@@ -121,13 +112,10 @@ pub struct SkinLimbModif {
     skin_vertices: Vec<SkinVertex>,
     limb_transformations: Vec<SkinTransformation>,
 }
-impl<R> ReadSegment<R> for SkinLimbModif
-where
-    R: Read + Seek,
-{
-    const SIZE: usize = 0x10;
+impl ReadSegment for SkinLimbModif {
+    const SIZE: u32 = 0x10;
 
-    fn read(r: &mut RomReader<R>) -> io::Result<Self>
+    fn read(r: &mut RomReader) -> Result<Self>
     where
         Self: Sized,
     {
@@ -143,11 +131,11 @@ where
             skin_vertices: r
                 .segment_iter(skin_vertices)
                 .take(vtx_count as _)
-                .collect::<io::Result<_>>()?,
+                .collect::<Result<_>>()?,
             limb_transformations: r
                 .segment_iter(limb_transformations)
                 .take(transform_count as _)
-                .collect::<io::Result<_>>()?,
+                .collect::<Result<_>>()?,
         })
     }
 }
@@ -160,13 +148,10 @@ struct SkinVertex {
     norm: [i8; 3],
     alpha: u8,
 }
-impl<R> ReadSegment<R> for SkinVertex
-where
-    R: Read,
-{
-    const SIZE: usize = 0xA;
+impl ReadSegment for SkinVertex {
+    const SIZE: u32 = 0xA;
 
-    fn read(r: &mut RomReader<R>) -> io::Result<Self>
+    fn read(r: &mut RomReader) -> Result<Self>
     where
         Self: Sized,
     {
@@ -186,13 +171,10 @@ struct SkinTransformation {
     pos: [i16; 3],
     scale: u8,
 }
-impl<R> ReadSegment<R> for SkinTransformation
-where
-    R: Read,
-{
-    const SIZE: usize = 0xA;
+impl ReadSegment for SkinTransformation {
+    const SIZE: u32 = 0xA;
 
-    fn read(r: &mut RomReader<R>) -> io::Result<Self>
+    fn read(r: &mut RomReader) -> Result<Self>
     where
         Self: Sized,
     {

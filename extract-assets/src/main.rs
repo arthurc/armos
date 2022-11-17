@@ -13,9 +13,12 @@ fn main() -> Result<()> {
     log::info!("Extracting assets from ROM file: {}", rom_path.display());
 
     let rom_file = fs::File::open(rom_path)?;
-    let mut reader = RomReader::new(rom_file).with_segment(rom::Segment::Object, 0x010DB000);
-    reader.seek(0x06009D74)?;
 
+    let mut reader = RomReader::new();
+    // object_horse
+    reader.set_segment_from(rom::Segment::Object, rom_file, (0x010DB000, 0x010E8F10))?;
+
+    reader.seek(0x06009D74);
     let skeleton_header = SkeletonHeader::read(&mut reader)?;
     dbg!(&skeleton_header);
 

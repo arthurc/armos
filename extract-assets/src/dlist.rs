@@ -1,10 +1,8 @@
-use std::io::Read;
-
 use anyhow::{anyhow, Result};
 
 use crate::rom::RomReader;
 
-pub fn for_each_instr(r: &mut RomReader<impl Read>, mut cb: impl FnMut(Opcode, u64)) -> Result<()> {
+pub fn for_each_instr(r: &mut RomReader, mut cb: impl FnMut(Opcode, u64)) -> Result<()> {
     loop {
         let data = r.read_u64()?;
         let opcode = Opcode::from_data(data)?;
