@@ -4,6 +4,8 @@ use ::gltf::json;
 use ::gltf::json::validation::Checked::*;
 use bytemuck::{Pod, Zeroable};
 
+use crate::dlist::{for_each_instr, Opcode};
+
 use super::*;
 
 #[derive(Debug, Default, Copy, Clone, Pod, Zeroable)]
@@ -12,7 +14,10 @@ struct Vtx {
     pos: [i16; 3],
 }
 
-pub fn gltf_from_skeleton(header: &SkeletonHeader) -> json::Root {
+pub fn gltf_from_skeleton<R>(header: &SkeletonHeader, r: &mut RomReader<R>) -> Result<json::Root>
+where
+    R: Read + Seek,
+{
     let mut meshes = Vec::new();
     let mut accessors = Vec::new();
     let mut buffers = Vec::new();
@@ -49,6 +54,42 @@ pub fn gltf_from_skeleton(header: &SkeletonHeader) -> json::Root {
                     ];
                 }
             }
+
+            let _ = r.seek(animated_limb.dlist as _)?;
+            for_each_instr(r, |opcode, data| match opcode {
+                Opcode::VTX => {
+                    let nn = ((data & 0x000FF00000000000u64) >> 44) as u32;
+                    let aa = ((data & 0x000000FF00000000u64) >> 32) as u32;
+                    let addr = data as u32;
+
+                    log::trace!(
+                        "VTX nn: {} aa: {} (aa >> 1) - nn: {} addr: 0x{:08X}",
+                        nn,
+                        aa,
+                        (aa >> 1) - nn,
+                        addr
+                    );
+                }
+                Opcode::TRI2 => {
+                    let aa = (((data & 0x00FF000000000000u64) >> 48) / 2) as u32;
+                    let bb = (((data & 0x0000FF0000000000u64) >> 40) / 2) as u32;
+                    let cc = (((data & 0x000000FF00000000u64) >> 32) / 2) as u32;
+                    let dd = (((data & 0x0000000000FF0000u64) >> 16) / 2) as u32;
+                    let ee = (((data & 0x000000000000FF00u64) >> 8) / 2) as u32;
+                    let ff = (((data & 0x00000000000000FFu64) >> 0) / 2) as u32;
+
+                    log::trace!(
+                        "TRI2 aa: {} bb: {} cc: {} dd: {} ee: {} ff: {}",
+                        aa,
+                        bb,
+                        cc,
+                        dd,
+                        ee,
+                        ff
+                    );
+                }
+                _ => (),
+            })?;
 
             buffers.push(json::Buffer {
                 byte_length: (vtxs.len() * mem::size_of::<Vtx>()) as _,
@@ -126,12 +167,12 @@ pub fn gltf_from_skeleton(header: &SkeletonHeader) -> json::Root {
         }
     }
 
-    json::Root {
+    Ok(json::Root {
         buffers,
         buffer_views,
         accessors,
         meshes,
         nodes,
         ..Default::default()
-    }
+    })
 }

@@ -2,6 +2,7 @@ use crate::{rom::RomReader, skin::SkeletonHeader};
 use anyhow::{Context, Result};
 use std::{fs, path::PathBuf};
 
+mod dlist;
 mod rom;
 mod skin;
 
@@ -18,7 +19,7 @@ fn main() -> Result<()> {
     let skeleton_header = SkeletonHeader::read(&mut reader)?;
     dbg!(&skeleton_header);
 
-    let root = skin::gltf::gltf_from_skeleton(&skeleton_header);
+    let root = skin::gltf::gltf_from_skeleton(&skeleton_header, &mut reader)?;
     let writer = fs::File::create("skeleton.gltf").expect("I/O error");
     gltf::json::serialize::to_writer_pretty(writer, &root).expect("Serialization error");
 
