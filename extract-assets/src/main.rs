@@ -20,7 +20,6 @@ fn main() -> Result<()> {
 
     reader.seek(0x06009D74);
     let skeleton_header = SkeletonHeader::read(&mut reader)?;
-    dbg!(&skeleton_header);
 
     let root = skin::gltf::gltf_from_skeleton(&skeleton_header, &mut reader)?;
     let writer = fs::File::create("skeleton.gltf").expect("I/O error");
