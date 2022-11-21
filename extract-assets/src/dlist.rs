@@ -1,10 +1,21 @@
+use std::mem;
+
 use anyhow::{anyhow, Result};
 
 use crate::rom::RomReader;
 
-pub fn for_each_instr(r: &mut RomReader, mut cb: impl FnMut(Opcode, u64)) -> Result<()> {
-    loop {
+pub struct InstrIter {
+    pos: u32,
+}
+impl InstrIter {
+    pub fn new(addr: u32) -> Self {
+        Self { pos: addr }
+    }
+
+    pub fn next(&mut self, r: &mut RomReader) -> Result<Option<(Opcode, u64)>> {
+        r.seek(self.pos as _);
         let data = r.read_u64()?;
+        self.pos += mem::size_of::<u64>() as u32;
         let opcode = Opcode::from_data(data)?;
 
         log::trace!(
@@ -13,14 +24,12 @@ pub fn for_each_instr(r: &mut RomReader, mut cb: impl FnMut(Opcode, u64)) -> Res
             data
         );
 
-        cb(opcode, data);
-
         if opcode == Opcode::ENDDL {
-            break;
+            Ok(None)
+        } else {
+            Ok(Some((opcode, data)))
         }
     }
-
-    Ok(())
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
