@@ -19,11 +19,11 @@ pub enum Segment {
 
 type E = BigEndian;
 
-const fn segment_number(addr: u32) -> u32 {
+pub const fn segment_number(addr: u32) -> u32 {
     (addr << 4) >> 28
 }
 
-const fn segment_offset(addr: u32) -> u32 {
+pub const fn segment_offset(addr: u32) -> u32 {
     addr & 0x00FFFFFF
 }
 
