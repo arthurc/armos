@@ -1,3 +1,4 @@
 /target
 **/*.z64
 **/*.swp
+**/*.gltf
