@@ -1,9 +1,35 @@
 use std::mem;
 
 use anyhow::{anyhow, Result};
+use bytemuck::{Pod, Zeroable};
 
-use crate::rom::RomReader;
+use crate::rom::{ReadSegment, RomReader};
 
+pub mod gltf;
+
+#[derive(Debug, Default, Copy, Clone, Pod, Zeroable)]
+#[repr(C)]
+pub struct Vtx {
+    pub pos: [i16; 3],
+    pub flag: i16,
+    pub tpos: [i16; 2],
+    pub cn: [u8; 4],
+}
+impl ReadSegment for Vtx {
+    const SIZE: u32 = 16;
+
+    fn read(r: &mut RomReader) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        Ok(Self {
+            pos: [r.read_i16()?, r.read_i16()?, r.read_i16()?],
+            ..Default::default()
+        })
+    }
+}
+
+#[derive(Debug)]
 pub struct InstrIter {
     pos: u32,
 }
@@ -38,8 +64,10 @@ pub enum Opcode {
     ENDDL,
     GEOMETRYMODE,
     LOADBLOCK,
+    LOADTLUT,
     RDPLOADSYNC,
     RDPPIPESYNC,
+    RDPTILESYNC,
     SETCOMBINE,
     SETPRIMCOLOR,
     SETTILE,
@@ -69,6 +97,8 @@ impl Opcode {
             0xE3 => Ok(SETOTHERMODE_H),
             0xE6 => Ok(RDPLOADSYNC),
             0xE7 => Ok(RDPPIPESYNC),
+            0xE8 => Ok(RDPTILESYNC),
+            0xF0 => Ok(LOADTLUT),
             0xF2 => Ok(SETTILESIZE),
             0xF3 => Ok(LOADBLOCK),
             0xF5 => Ok(SETTILE),

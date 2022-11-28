@@ -1,4 +1,5 @@
 use std::{
+    fmt,
     io::{self, Read, Seek, SeekFrom},
     marker::PhantomData,
     mem,
@@ -168,6 +169,11 @@ where
         // Read the next pointer and seek to it,
         // i.e. where the data is stored
         let addr = self.r.read_u32().ok()?;
+        log::trace!(
+            "Reading pointer segment @ 0x{:08X}->0x{:08X}",
+            self.pos,
+            addr
+        );
         self.r.seek(addr as _);
 
         self.pos += mem::size_of::<u32>() as u32;
@@ -198,8 +204,32 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         self.r.seek(self.pos);
+        log::trace!("Reading segment @ 0x{:08X}", self.pos);
         self.pos += T::SIZE;
 
         Some(T::read(self.r))
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct VirtualAddress(u32);
+impl VirtualAddress {
+    pub fn new(addr: u32) -> Self {
+        Self(addr)
+    }
+}
+impl fmt::Display for VirtualAddress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "0x{:08X}", self.0)
+    }
+}
+impl fmt::Debug for VirtualAddress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
+impl From<VirtualAddress> for u32 {
+    fn from(item: VirtualAddress) -> Self {
+        item.0
     }
 }
