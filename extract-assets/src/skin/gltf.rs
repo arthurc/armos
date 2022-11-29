@@ -181,11 +181,11 @@ pub fn gltf_from_skeleton(header: &SkeletonHeader, r: &mut RomReader) -> Result<
                     vertex_buffer.len()
                 );
 
-                // FIXME: Need to make this big endian
-                r.set_segment(
-                    rom::Segment::IconItemStatic,
-                    Some(bytemuck::cast_slice(&vertex_buffer).to_vec()),
-                );
+                let mut vertex_buffer_segment = Vec::new();
+                for vtx in &vertex_buffer {
+                    vtx.write(&mut vertex_buffer_segment)?;
+                }
+                r.set_segment(rom::Segment::IconItemStatic, Some(vertex_buffer_segment));
 
                 log::info!("Animated limb display list @ 0x{:08X}", animated_limb.dlist);
 

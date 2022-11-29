@@ -19,6 +19,7 @@ pub enum Segment {
 }
 
 type E = BigEndian;
+pub type Endian = E;
 
 pub const fn segment_number(addr: u32) -> u32 {
     (addr << 4) >> 28

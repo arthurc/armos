@@ -1,19 +1,34 @@
-use std::mem;
+use std::{io, mem};
 
 use anyhow::{anyhow, Result};
-use bytemuck::{Pod, Zeroable};
+use byteorder::WriteBytesExt;
 
-use crate::rom::{ReadSegment, RomReader};
+use crate::rom::{self, ReadSegment, RomReader};
 
 pub mod gltf;
 
-#[derive(Debug, Default, Copy, Clone, Pod, Zeroable)]
-#[repr(C)]
+#[derive(Debug, Default, Clone)]
 pub struct Vtx {
     pub pos: [i16; 3],
     pub flag: i16,
     pub tpos: [i16; 2],
     pub cn: [u8; 4],
+}
+impl Vtx {
+    pub fn write<W>(&self, w: &mut W) -> io::Result<()>
+    where
+        W: io::Write,
+    {
+        w.write_i16::<rom::Endian>(self.pos[0])?;
+        w.write_i16::<rom::Endian>(self.pos[1])?;
+        w.write_i16::<rom::Endian>(self.pos[2])?;
+        w.write_i16::<rom::Endian>(self.flag)?;
+        w.write_i16::<rom::Endian>(self.tpos[0])?;
+        w.write_i16::<rom::Endian>(self.tpos[1])?;
+        w.write(&self.cn)?;
+
+        Ok(())
+    }
 }
 impl ReadSegment for Vtx {
     const SIZE: u32 = 16;
