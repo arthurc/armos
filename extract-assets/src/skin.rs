@@ -53,9 +53,11 @@ impl ReadSegment for SkinLimb {
         let segment = r.read_u32()?;
 
         log::info!(
-            "Skin limb segment @ 0x{:08X}, segment_type: {}",
+            "Skin limb segment @ 0x{:08X}, segment_type: {:>2}, child: {:>3}, sibling: {:>3}",
             segment,
-            segment_type
+            segment_type,
+            child,
+            sibling
         );
 
         let skin_limb_type = if segment_type == 4 && segment != 0 {

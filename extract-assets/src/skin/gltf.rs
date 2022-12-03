@@ -13,7 +13,7 @@ use crate::{
     rom,
 };
 
-fn create_mesh(root: &mut json::Root, vertices: Vec<Vertex>, indices: Vec<u32>) {
+fn create_mesh(root: &mut json::Root, vertices: Vec<Vertex>, indices: Vec<u32>) -> u32 {
     let min = fold_pos(&vertices, |a, b| a.min(b));
     let max = fold_pos(&vertices, |a, b| a.max(b));
 
@@ -22,10 +22,6 @@ fn create_mesh(root: &mut json::Root, vertices: Vec<Vertex>, indices: Vec<u32>) 
         vertices.len(),
         indices.len()
     );
-
-    for v in &vertices {
-        println!("vtxPoint x: {}, y: {}, z: {}", v.pos[0], v.pos[1], v.pos[2]);
-    }
 
     root.buffers.push(json::Buffer {
         byte_length: mem::size_of_val(&*vertices) as _,
@@ -124,26 +120,14 @@ fn create_mesh(root: &mut json::Root, vertices: Vec<Vertex>, indices: Vec<u32>) 
         weights: None,
     });
 
-    root.nodes.push(json::Node {
-        camera: None,
-        children: None,
-        extensions: Default::default(),
-        extras: Default::default(),
-        matrix: None,
-        mesh: Some(json::Index::new(root.meshes.len() as u32 - 1)),
-        name: None,
-        rotation: None,
-        scale: None,
-        translation: None,
-        skin: None,
-        weights: None,
-    });
+    root.meshes.len() as u32 - 1
 }
 
 pub fn gltf_from_skeleton(header: &SkeletonHeader, r: &mut RomReader) -> Result<json::Root> {
     let mut root: json::Root = Default::default();
 
     for limb in &header.limbs {
+        let mut mesh = None;
         match limb.skin_limb_type {
             Some(SkinLimbType::Animated(ref animated_limb)) => {
                 let mut vertex_buffer =
@@ -192,7 +176,7 @@ pub fn gltf_from_skeleton(header: &SkeletonHeader, r: &mut RomReader) -> Result<
                 let DisplayListData { vertices, indices } =
                     dlist::gltf::dlist_to_gltf(r, animated_limb.dlist)?;
 
-                create_mesh(&mut root, vertices, indices);
+                mesh = Some(json::Index::new(create_mesh(&mut root, vertices, indices)));
             }
             Some(SkinLimbType::Normal(dlist)) => {
                 log::info!("Normal limb display list @ {}", dlist);
@@ -200,9 +184,58 @@ pub fn gltf_from_skeleton(header: &SkeletonHeader, r: &mut RomReader) -> Result<
                 let DisplayListData { vertices, indices } =
                     dlist::gltf::dlist_to_gltf(r, dlist.into())?;
 
-                create_mesh(&mut root, vertices, indices);
+                mesh = Some(json::Index::new(create_mesh(&mut root, vertices, indices)));
             }
             None => (),
+        }
+
+        root.nodes.push(json::Node {
+            camera: None,
+            children: None,
+            extensions: Default::default(),
+            extras: Default::default(),
+            matrix: None,
+            mesh,
+            name: None,
+            rotation: None,
+            scale: None,
+            translation: Some([
+                limb.joint_pos[0] as f32,
+                limb.joint_pos[1] as f32,
+                limb.joint_pos[2] as f32,
+            ]),
+            skin: None,
+            weights: None,
+        });
+    }
+
+    let mut parents = vec![None; root.nodes.len()];
+    for (limb_index, limb) in header.limbs.iter().enumerate() {
+        if limb.child != 0xFF {
+            parents[limb.child as usize] = Some(limb_index);
+        }
+
+        if limb.sibling != 0xFF {
+            parents[limb.sibling as usize] = Some(parents[limb_index as usize].unwrap());
+        }
+    }
+
+    for (limb_index, limb) in header.limbs.iter().enumerate() {
+        log::info!(
+            "x limb_index: {}, child: {}, sibling: {}",
+            limb_index,
+            limb.child,
+            limb.sibling
+        );
+
+        if let Some(p) = parents[limb_index] {
+            root.nodes[p].children = match root.nodes[p].children.take() {
+                Some(mut v) => {
+                    v.push(json::Index::new(limb_index as u32));
+                    Some(v)
+                }
+                None => Some(vec![json::Index::new(limb_index as u32)]),
+            }
         }
     }
 
@@ -210,12 +243,7 @@ pub fn gltf_from_skeleton(header: &SkeletonHeader, r: &mut RomReader) -> Result<
         extensions: Default::default(),
         extras: Default::default(),
         name: None,
-        nodes: root
-            .nodes
-            .iter()
-            .enumerate()
-            .map(|(i, _)| json::Index::new(i as u32))
-            .collect(),
+        nodes: vec![json::Index::new(0)],
     });
 
     Ok(root)
