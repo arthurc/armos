@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use std::{fs, path::PathBuf};
 
 mod dlist;
+mod n64;
 mod rom;
 mod skeleton;
 mod skin;
