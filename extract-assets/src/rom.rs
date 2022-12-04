@@ -2,7 +2,7 @@ use std::{
     fmt,
     io::{self, Read, Seek, SeekFrom},
     marker::PhantomData,
-    mem,
+    mem, ops,
 };
 
 use anyhow::Result;
@@ -85,6 +85,11 @@ impl RomReader {
         self.pos = offset;
     }
 
+    pub fn seek_addr(&mut self, frame_data: impl Into<VirtualAddress>) -> &mut Self {
+        self.seek(frame_data.into().into());
+        self
+    }
+
     pub fn read_u8(&mut self) -> io::Result<u8> {
         ReadBytesExt::read_u8(self)
     }
@@ -118,6 +123,10 @@ impl RomReader {
         T: ReadSegment,
     {
         Ok(T::read(self)?)
+    }
+
+    pub fn read_addr(&mut self) -> Result<VirtualAddress> {
+        Ok(VirtualAddress::new(self.read_u32()?))
     }
 
     fn current_segment(&self) -> io::Result<&[u8]> {
@@ -232,5 +241,20 @@ impl fmt::Debug for VirtualAddress {
 impl From<VirtualAddress> for u32 {
     fn from(item: VirtualAddress) -> Self {
         item.0
+    }
+}
+impl From<u32> for VirtualAddress {
+    fn from(item: u32) -> Self {
+        Self::new(item)
+    }
+}
+impl<T> ops::Add<T> for VirtualAddress
+where
+    T: Into<u32>,
+{
+    type Output = Self;
+
+    fn add(self, rhs: T) -> Self::Output {
+        Self::new(self.0 + rhs.into())
     }
 }

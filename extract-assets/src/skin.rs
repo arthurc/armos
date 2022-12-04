@@ -6,7 +6,7 @@ use std::fmt::Debug;
 
 #[derive(Debug)]
 pub struct SkeletonHeader {
-    limbs: Vec<SkinLimb>,
+    pub limbs: Vec<SkinLimb>,
 }
 impl SkeletonHeader {
     pub fn read(r: &mut RomReader) -> Result<Self> {
