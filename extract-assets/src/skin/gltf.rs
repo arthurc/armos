@@ -171,7 +171,7 @@ pub fn gltf_from_skeleton(header: &SkeletonHeader, r: &mut RomReader) -> Result<
                 }
                 r.set_segment(rom::Segment::IconItemStatic, Some(vertex_buffer_segment));
 
-                log::info!("Animated limb display list @ 0x{:08X}", animated_limb.dlist);
+                log::info!("Animated limb display list @ {}", animated_limb.dlist);
 
                 let DisplayListData { vertices, indices } =
                     dlist::gltf::dlist_to_gltf(r, animated_limb.dlist)?;

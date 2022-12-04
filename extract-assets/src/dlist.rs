@@ -3,7 +3,7 @@ use std::{io, mem};
 use anyhow::{anyhow, Result};
 use byteorder::WriteBytesExt;
 
-use crate::rom::{self, ReadSegment, RomReader};
+use crate::rom::{self, ReadSegment, RomReader, VirtualAddress};
 
 pub mod gltf;
 
@@ -46,17 +46,16 @@ impl ReadSegment for Vtx {
 
 #[derive(Debug)]
 pub struct InstrIter {
-    pos: u32,
+    addr: VirtualAddress,
 }
 impl InstrIter {
-    pub fn new(addr: u32) -> Self {
-        Self { pos: addr }
+    pub fn new(addr: VirtualAddress) -> Self {
+        Self { addr }
     }
 
     pub fn next(&mut self, r: &mut RomReader) -> Result<Option<(Opcode, u64)>> {
-        r.seek(self.pos as _);
-        let data = r.read_u64()?;
-        self.pos += mem::size_of::<u64>() as u32;
+        let data = r.seek(self.addr).read_u64()?;
+        self.addr += mem::size_of::<u64>() as u32;
         let opcode = Opcode::from_data(data)?;
 
         log::trace!(

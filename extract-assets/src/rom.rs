@@ -67,7 +67,7 @@ impl RomReader {
         Ok(())
     }
 
-    pub fn ptr_segment_iter<T>(&mut self, addr: u32) -> PtrSegmentIter<T>
+    pub fn ptr_segment_iter<T>(&mut self, addr: VirtualAddress) -> PtrSegmentIter<T>
     where
         T: ReadSegment,
     {
@@ -81,12 +81,8 @@ impl RomReader {
         SegmentIter::new(self, addr)
     }
 
-    pub fn seek(&mut self, offset: u32) {
-        self.pos = offset;
-    }
-
-    pub fn seek_addr(&mut self, frame_data: impl Into<VirtualAddress>) -> &mut Self {
-        self.seek(frame_data.into().into());
+    pub fn seek(&mut self, frame_data: impl Into<VirtualAddress>) -> &mut Self {
+        self.pos = frame_data.into().into();
         self
     }
 
@@ -154,11 +150,11 @@ impl Read for RomReader {
 
 pub struct PtrSegmentIter<'a, T> {
     r: &'a mut RomReader,
-    pos: u32,
+    pos: VirtualAddress,
     _marker: PhantomData<T>,
 }
 impl<'a, T> PtrSegmentIter<'a, T> {
-    fn new(r: &'a mut RomReader, addr: u32) -> Self {
+    fn new(r: &'a mut RomReader, addr: VirtualAddress) -> Self {
         Self {
             r,
             pos: addr,
@@ -178,13 +174,9 @@ where
 
         // Read the next pointer and seek to it,
         // i.e. where the data is stored
-        let addr = self.r.read_u32().ok()?;
-        log::trace!(
-            "Reading pointer segment @ 0x{:08X}->0x{:08X}",
-            self.pos,
-            addr
-        );
-        self.r.seek(addr as _);
+        let addr = self.r.read_addr().ok()?;
+        log::trace!("Reading pointer segment @ {}->{}", self.pos, addr);
+        self.r.seek(addr);
 
         self.pos += mem::size_of::<u32>() as u32;
 
@@ -256,5 +248,13 @@ where
 
     fn add(self, rhs: T) -> Self::Output {
         Self::new(self.0 + rhs.into())
+    }
+}
+impl<T> ops::AddAssign<T> for VirtualAddress
+where
+    T: Into<u32>,
+{
+    fn add_assign(&mut self, rhs: T) {
+        self.0 += rhs.into()
     }
 }

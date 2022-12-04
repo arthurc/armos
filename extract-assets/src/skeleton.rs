@@ -84,10 +84,8 @@ impl SkeletonAnimation {
         animation: &AnimationHeader,
     ) -> Result<Self> {
         let frame_data = |r: &mut rom::RomReader, frame_index: i16, n: u16| {
-            r.seek_addr(
-                animation.frame_data + mem::size_of::<i16>() as u16 * (frame_index as u16 + n),
-            )
-            .read_i16()
+            r.seek(animation.frame_data + mem::size_of::<i16>() as u16 * (frame_index as u16 + n))
+                .read_i16()
         };
         let static_index_max = animation.static_index_max;
         let joint_indices = r

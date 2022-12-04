@@ -24,11 +24,11 @@ fn main() -> Result<()> {
     reader.set_segment_from(rom::Segment::Object, rom_file, (0x010DB000, 0x010E8F10))?;
 
     // gEponaSkel
-    let skeleton_header = SkeletonHeader::read(reader.seek_addr(0x06009D74))?;
+    let skeleton_header = SkeletonHeader::read(reader.seek(0x06009D74))?;
 
     // gEponaGallopingAnim
     log::info!("Reading gEponaGallopingAnim");
-    let animation_header = AnimationHeader::read(reader.seek_addr(0x06001E2C))?;
+    let animation_header = AnimationHeader::read(reader.seek(0x06001E2C))?;
     let _animation =
         SkeletonAnimation::create_from_header(&mut reader, &skeleton_header, &animation_header)?;
 

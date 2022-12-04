@@ -10,11 +10,11 @@ pub struct SkeletonHeader {
 }
 impl SkeletonHeader {
     pub fn read(r: &mut RomReader) -> Result<Self> {
-        let segment = r.read_u32()?;
+        let segment = r.read_addr()?;
         let limb_count = r.read_u8()?;
 
         log::info!(
-            "Reading skeleton header. segment: 0x{:08X}, limb_count: {}",
+            "Reading skeleton header. segment: {}, limb_count: {}",
             segment,
             limb_count
         );
@@ -62,9 +62,8 @@ impl ReadSegment for SkinLimb {
 
         let skin_limb_type = if segment_type == 4 && segment != 0 {
             log::info!("  - Animated type @ 0x{:08X}", segment);
-            r.seek(segment as _);
             Some(SkinLimbType::Animated(
-                r.read_segment::<SkinAnimatedLimbData>()?,
+                r.seek(segment).read_segment::<SkinAnimatedLimbData>()?,
             ))
         } else if segment_type == 11 && segment != 0 {
             log::info!("  - Normal type @ 0x{:08X}", segment);
@@ -94,10 +93,11 @@ impl Debug for SkinLimb {
     }
 }
 
+#[derive(Debug)]
 pub struct SkinAnimatedLimbData {
     total_vtx_count: u16,
     limb_modifications: Vec<SkinLimbModif>,
-    dlist: u32,
+    dlist: VirtualAddress,
 }
 impl ReadSegment for SkinAnimatedLimbData {
     const SIZE: u32 = 0xC;
@@ -109,7 +109,7 @@ impl ReadSegment for SkinAnimatedLimbData {
         let total_vtx_count = r.read_u16()?;
         let limb_modif_count = r.read_u16()?;
         let limb_modifications = r.read_u32()?;
-        let dlist = r.read_u32()?;
+        let dlist = r.read_addr()?;
 
         log::info!(
             "Reading skin animated limb data. limb_modif_count: {}",
@@ -124,15 +124,6 @@ impl ReadSegment for SkinAnimatedLimbData {
                 .collect::<Result<_>>()?,
             dlist,
         })
-    }
-}
-impl Debug for SkinAnimatedLimbData {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SkinAnimatedLimbData")
-            .field("total_vtx_count", &self.total_vtx_count)
-            .field("limb_modifications", &self.limb_modifications)
-            .field("dlist", &format_args!("0x{:08X}", self.dlist))
-            .finish()
     }
 }
 

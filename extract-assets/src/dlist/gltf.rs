@@ -1,3 +1,5 @@
+use crate::rom::VirtualAddress;
+
 use super::*;
 
 use anyhow::Result;
@@ -27,7 +29,7 @@ struct Interpreter<'a> {
     vertices: Vec<Vertex>,
 }
 impl<'a> Interpreter<'a> {
-    fn new(addr: u32, r: &'a mut RomReader) -> Self {
+    fn new(addr: VirtualAddress, r: &'a mut RomReader) -> Self {
         Self {
             iter: InstrIter::new(addr),
             r,
@@ -144,7 +146,7 @@ pub struct DisplayListData {
     pub indices: Vec<u32>,
 }
 
-pub fn dlist_to_gltf(r: &mut RomReader, addr: u32) -> Result<DisplayListData> {
+pub fn dlist_to_gltf(r: &mut RomReader, addr: VirtualAddress) -> Result<DisplayListData> {
     let mut interpreter = Interpreter::new(addr, r);
     while interpreter.next()? {}
 
