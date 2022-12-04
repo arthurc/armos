@@ -34,7 +34,7 @@ enum SkinLimbType {
     Normal(VirtualAddress),
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct SkinLimb {
     joint_pos: [i16; 3],
     child: u8,
@@ -50,24 +50,24 @@ impl ReadSegment for SkinLimb {
         let child = r.read_u8()?;
         let sibling = r.read_u8()?;
         let segment_type = r.read_i32()?;
-        let segment = r.read_u32()?;
+        let segment = r.read_addr()?;
 
         log::info!(
-            "Skin limb segment @ 0x{:08X}, segment_type: {:>2}, child: {:>3}, sibling: {:>3}",
+            "Skin limb segment @ {}, segment_type: {:>2}, child: {:>3}, sibling: {:>3}",
             segment,
             segment_type,
             child,
             sibling
         );
 
-        let skin_limb_type = if segment_type == 4 && segment != 0 {
-            log::info!("  - Animated type @ 0x{:08X}", segment);
+        let skin_limb_type = if segment_type == 4 && segment != VirtualAddress::NULL {
+            log::info!("  - Animated type @ {}", segment);
             Some(SkinLimbType::Animated(
                 r.seek(segment).read_segment::<SkinAnimatedLimbData>()?,
             ))
-        } else if segment_type == 11 && segment != 0 {
-            log::info!("  - Normal type @ 0x{:08X}", segment);
-            Some(SkinLimbType::Normal(VirtualAddress::new(segment)))
+        } else if segment_type == 11 && segment != VirtualAddress::NULL {
+            log::info!("  - Normal type @ {}", segment);
+            Some(SkinLimbType::Normal(segment))
         } else {
             None
         };
@@ -79,17 +79,6 @@ impl ReadSegment for SkinLimb {
             segment_type,
             skin_limb_type,
         })
-    }
-}
-impl Debug for SkinLimb {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SkinLimb")
-            .field("joint_pos", &self.joint_pos)
-            .field("child", &self.child)
-            .field("sibling", &self.sibling)
-            .field("segment_type", &self.segment_type)
-            .field("skin_limb_type", &self.skin_limb_type)
-            .finish()
     }
 }
 
@@ -108,7 +97,7 @@ impl ReadSegment for SkinAnimatedLimbData {
     {
         let total_vtx_count = r.read_u16()?;
         let limb_modif_count = r.read_u16()?;
-        let limb_modifications = r.read_u32()?;
+        let limb_modifications = r.read_addr()?;
         let dlist = r.read_addr()?;
 
         log::info!(
@@ -144,8 +133,8 @@ impl ReadSegment for SkinLimbModif {
         let transform_count = r.read_u16()?;
         let unk_4 = r.read_u16()?;
         let _ = r.read_u16()?; // Padding
-        let skin_vertices = r.read_u32()?;
-        let limb_transformations = r.read_u32()?;
+        let skin_vertices = r.read_addr()?;
+        let limb_transformations = r.read_addr()?;
 
         Ok(Self {
             unk_4,

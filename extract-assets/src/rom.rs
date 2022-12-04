@@ -74,7 +74,7 @@ impl RomReader {
         PtrSegmentIter::new(self, addr)
     }
 
-    pub fn segment_iter<T>(&mut self, addr: u32) -> SegmentIter<T>
+    pub fn segment_iter<T>(&mut self, addr: VirtualAddress) -> SegmentIter<T>
     where
         T: ReadSegment,
     {
@@ -186,13 +186,13 @@ where
 
 pub struct SegmentIter<'a, T> {
     r: &'a mut RomReader,
-    pos: u32,
+    addr: VirtualAddress,
     _marker: PhantomData<T>,
 }
 impl<'a, T> SegmentIter<'a, T> {
-    fn new(r: &'a mut RomReader, addr: u32) -> Self {
+    fn new(r: &'a mut RomReader, addr: VirtualAddress) -> Self {
         Self {
-            pos: addr,
+            addr,
             r,
             _marker: PhantomData,
         }
@@ -205,17 +205,19 @@ where
     type Item = Result<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.r.seek(self.pos);
-        log::trace!("Reading segment @ 0x{:08X}", self.pos);
-        self.pos += T::SIZE;
+        self.r.seek(self.addr);
+        log::trace!("Reading segment @ {}", self.addr);
+        self.addr += T::SIZE;
 
         Some(T::read(self.r))
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct VirtualAddress(u32);
 impl VirtualAddress {
+    pub const NULL: VirtualAddress = VirtualAddress(0);
+
     pub fn new(addr: u32) -> Self {
         Self(addr)
     }

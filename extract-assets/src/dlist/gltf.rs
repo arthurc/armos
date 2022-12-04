@@ -22,7 +22,7 @@ struct Interpreter<'a> {
     iter: InstrIter,
     r: &'a mut RomReader,
     tris: Vec<[u32; 3]>,
-    current_vtx_addr: Option<u32>,
+    current_vtx_addr: Option<VirtualAddress>,
     done: bool,
 
     indices: Vec<u32>,
@@ -55,10 +55,10 @@ impl<'a> Interpreter<'a> {
             Opcode::VTX => {
                 let nn = ((data & 0x000FF00000000000u64) >> 44) as u32;
                 let aa = ((data & 0x000000FF00000000u64) >> 32) as u32;
-                let addr = data as u32;
+                let addr = VirtualAddress::new(data as u32);
 
                 log::trace!(
-                    "VTX nn: {} aa: {} (aa >> 1) - nn: {} addr: 0x{:08X}",
+                    "VTX nn: {} aa: {} (aa >> 1) - nn: {} addr: {}",
                     nn,
                     aa,
                     (aa >> 1) - nn,
@@ -108,7 +108,7 @@ impl<'a> Interpreter<'a> {
         Ok(true)
     }
 
-    fn flush(&mut self, next_vtx_addr: Option<u32>) -> Result<()> {
+    fn flush(&mut self, next_vtx_addr: Option<VirtualAddress>) -> Result<()> {
         let Some(vtx_addr) = mem::replace(&mut self.current_vtx_addr, next_vtx_addr) else {
             return Ok(());
         };
