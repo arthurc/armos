@@ -10,7 +10,7 @@ anyhow = "1.0.66"
 base64 = "0.13.1"
 bytemuck = { version = "1", features = ["derive"] }
 byteorder = "1"
-glam = "0.22.0"
+glam = { version = "0.22.0", features = ["bytemuck"] }
 glob = "0.3"
 gltf = "1.0.0"
 log = "0.4"
