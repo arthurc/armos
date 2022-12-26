@@ -1,11 +1,16 @@
 use std::mem;
 
 use anyhow::Result;
+use bytemuck::{Pod, Zeroable};
+use glam::Quat;
 
 use crate::{
+    n64::math::rotate_zyx,
     rom::{self, ReadSegment, VirtualAddress},
     skin::SkeletonHeader,
 };
+
+pub mod gltf;
 
 #[derive(Debug)]
 pub struct AnimationHeaderCommon {
@@ -94,9 +99,10 @@ impl SkeletonAnimation {
             .collect::<Result<Vec<_>>>()?;
 
         log::info!(
-            "Reading skeleton animation. static_index_max: {}  joint indices: {}",
+            "Reading skeleton animation. static_index_max: {}  joint indices: {}  frame count: {}",
             static_index_max,
-            joint_indices.len()
+            joint_indices.len(),
+            animation.common.frame_count
         );
 
         let mut frames = Vec::new();
@@ -132,14 +138,27 @@ impl SkeletonAnimation {
                 joint_table.push([x, y, z]);
             }
 
-            frames.push(Frame { joint_table });
+            let mut joints = Vec::new();
+            for rot in joint_table.iter().skip(1) {
+                joints.push(Joint {
+                    rotation: Quat::from_mat4(&rotate_zyx(rot[0], rot[1], rot[2])),
+                })
+            }
+
+            frames.push(Frame { joints });
         }
 
         Ok(Self { frames })
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Frame {
-    pub joint_table: Vec<[i16; 3]>,
+    pub joints: Vec<Joint>,
+}
+
+#[derive(Debug, Clone, Copy, Zeroable, Pod)]
+#[repr(C)]
+pub struct Joint {
+    pub rotation: Quat,
 }

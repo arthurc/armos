@@ -1,6 +1,6 @@
 // This file emulates the same math functions as can be found in the OOT project
 
-use glam::DMat4;
+use glam::Mat4;
 
 const SHT_MAX: f32 = 32767.0f32;
 const SHT_MINV: f32 = 1.0f32 / SHT_MAX;
@@ -126,7 +126,7 @@ fn cos_s(angle: i16) -> f32 {
 }
 
 // See SkinMatrix_SetRotateZYX
-pub fn rotate_zyx(x: i16, y: i16, z: i16) -> DMat4 {
+pub fn rotate_zyx(x: i16, y: i16, z: i16) -> Mat4 {
     let sin_z = sin_s(z);
     let cos_z = cos_s(z);
 
@@ -189,22 +189,22 @@ pub fn rotate_zyx(x: i16, y: i16, z: i16) -> DMat4 {
         mf_zy = 0.0;
     }
 
-    DMat4::from_cols_array(&[
-        mf_xx as f64,
-        mf_yx as f64,
-        mf_zx as f64,
-        mf_wx as f64,
-        mf_xy as f64,
-        mf_yy as f64,
-        mf_zy as f64,
-        mf_wy as f64,
-        mf_xz as f64,
-        mf_yz as f64,
-        mf_zz as f64,
-        mf_wz as f64,
-        mf_xw as f64,
-        mf_yw as f64,
-        mf_zw as f64,
-        mf_ww as f64,
+    Mat4::from_cols_array(&[
+        mf_xx as f32,
+        mf_yx as f32,
+        mf_zx as f32,
+        mf_wx as f32,
+        mf_xy as f32,
+        mf_yy as f32,
+        mf_zy as f32,
+        mf_wy as f32,
+        mf_xz as f32,
+        mf_yz as f32,
+        mf_zz as f32,
+        mf_wz as f32,
+        mf_xw as f32,
+        mf_yw as f32,
+        mf_zw as f32,
+        mf_ww as f32,
     ])
 }

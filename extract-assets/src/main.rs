@@ -30,11 +30,33 @@ fn main() -> Result<()> {
     // gEponaGallopingAnim
     log::info!("Reading gEponaGallopingAnim");
     let animation_header = AnimationHeader::read(reader.seek(0x06001E2C))?;
-    let _animation =
+    let animation =
         SkeletonAnimation::create_from_header(&mut reader, &skeleton_header, &animation_header)?;
 
+    log::info!("Reading gEponaJumpingAnim");
+    let jumping_animation_header = AnimationHeader::read(reader.seek(0x06002470))?;
+    let jumping_animation = SkeletonAnimation::create_from_header(
+        &mut reader,
+        &skeleton_header,
+        &jumping_animation_header,
+    )?;
+
     log::info!("Writing skin gltf");
-    let root = skin::gltf::gltf_from_skeleton(&skeleton_header, &mut reader)?;
+    let mut root = skin::gltf::gltf_from_skeleton(&skeleton_header, &mut reader)?;
+
+    skeleton::gltf::add_animation(
+        "gEponaGallopingAnim",
+        &mut root,
+        &skeleton_header,
+        &animation,
+    )?;
+    skeleton::gltf::add_animation(
+        "gEponaJumpingAnim",
+        &mut root,
+        &skeleton_header,
+        &jumping_animation,
+    )?;
+
     let writer = fs::File::create("skeleton.gltf").expect("I/O error");
     gltf::json::serialize::to_writer_pretty(writer, &root).expect("Serialization error");
 
