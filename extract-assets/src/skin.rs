@@ -1,30 +1,59 @@
 pub mod gltf;
+mod skeleton;
 
 use crate::rom::{ReadSegment, RomReader, VirtualAddress};
 use anyhow::Result;
 use std::fmt::Debug;
 
-#[derive(Debug)]
-pub struct SkeletonHeader {
-    pub limbs: Vec<SkinLimb>,
+use self::skeleton::{AnimationHeader, SkeletonAnimation, SkeletonHeader};
+
+pub struct Skin {
+    skeleton_header: SkeletonHeader,
+    animations: Vec<SkeletonAnimation>,
 }
-impl SkeletonHeader {
-    pub fn read(r: &mut RomReader) -> Result<Self> {
-        let segment = r.read_addr()?;
-        let limb_count = r.read_u8()?;
-
-        log::info!(
-            "Reading skeleton header. segment: {}, limb_count: {}",
-            segment,
-            limb_count
-        );
-
+impl Skin {
+    pub fn read(r: &mut RomReader, addr: impl Into<VirtualAddress>) -> Result<Self> {
         Ok(Self {
-            limbs: r
-                .ptr_segment_iter(segment)
-                .take(limb_count as usize)
-                .collect::<Result<_>>()?,
+            skeleton_header: SkeletonHeader::read(r.seek(addr))?,
+            animations: Vec::new(),
         })
+    }
+
+    pub fn read_animation(
+        &mut self,
+        name: impl Into<String>,
+        r: &mut RomReader,
+        addr: impl Into<VirtualAddress>,
+    ) -> Result<()> {
+        let name = name.into();
+        log::info!("Reading {}", name);
+
+        let animation_header = AnimationHeader::read(r.seek(addr))?;
+        self.animations.push(SkeletonAnimation::create_from_header(
+            name,
+            r,
+            &self.skeleton_header,
+            &animation_header,
+        )?);
+
+        Ok(())
+    }
+
+    pub fn to_gltf(&self, r: &mut RomReader) -> Result<::gltf::json::Root> {
+        log::info!("Creating skin gltf");
+
+        let mut root = gltf::gltf_from_skeleton(&self.skeleton_header, r)?;
+
+        for animation in &self.animations {
+            gltf::add_animation(
+                &animation.name,
+                &mut root,
+                &self.skeleton_header,
+                &animation,
+            )?;
+        }
+
+        Ok(root)
     }
 }
 

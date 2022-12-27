@@ -1,16 +1,34 @@
 use std::mem;
 
-use anyhow::Result;
-use bytemuck::{Pod, Zeroable};
-use glam::Quat;
+use glam::{Quat, Vec3};
 
-use crate::{
-    n64::math::rotate_zyx,
-    rom::{self, ReadSegment, VirtualAddress},
-    skin::SkeletonHeader,
-};
+use crate::n64::math::rotate_zyx;
 
-pub mod gltf;
+use super::*;
+
+#[derive(Debug)]
+pub struct SkeletonHeader {
+    pub limbs: Vec<SkinLimb>,
+}
+impl SkeletonHeader {
+    pub fn read(r: &mut RomReader) -> Result<Self> {
+        let segment = r.read_addr()?;
+        let limb_count = r.read_u8()?;
+
+        log::info!(
+            "Reading skeleton header. segment: {}, limb_count: {}",
+            segment,
+            limb_count
+        );
+
+        Ok(Self {
+            limbs: r
+                .ptr_segment_iter(segment)
+                .take(limb_count as usize)
+                .collect::<Result<_>>()?,
+        })
+    }
+}
 
 #[derive(Debug)]
 pub struct AnimationHeaderCommon {
@@ -19,7 +37,7 @@ pub struct AnimationHeaderCommon {
 impl ReadSegment for AnimationHeaderCommon {
     const SIZE: u32 = 0x02;
 
-    fn read(r: &mut rom::RomReader) -> anyhow::Result<Self>
+    fn read(r: &mut RomReader) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
@@ -39,7 +57,7 @@ pub struct AnimationHeader {
 impl ReadSegment for AnimationHeader {
     const SIZE: u32 = 0x10;
 
-    fn read(r: &mut rom::RomReader) -> anyhow::Result<Self>
+    fn read(r: &mut RomReader) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
@@ -67,7 +85,7 @@ pub struct JointIndex {
 impl ReadSegment for JointIndex {
     const SIZE: u32 = 0x06;
 
-    fn read(r: &mut rom::RomReader) -> anyhow::Result<Self>
+    fn read(r: &mut RomReader) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
@@ -80,15 +98,17 @@ impl ReadSegment for JointIndex {
 }
 
 pub struct SkeletonAnimation {
+    pub name: String,
     pub frames: Vec<Frame>,
 }
 impl SkeletonAnimation {
     pub fn create_from_header(
-        r: &mut rom::RomReader,
+        name: String,
+        r: &mut RomReader,
         skeleton: &SkeletonHeader,
         animation: &AnimationHeader,
     ) -> Result<Self> {
-        let frame_data = |r: &mut rom::RomReader, frame_index: i16, n: u16| {
+        let frame_data = |r: &mut RomReader, frame_index: i16, n: u16| {
             r.seek(animation.frame_data + mem::size_of::<i16>() as u16 * (frame_index as u16 + n))
                 .read_i16()
         };
@@ -109,7 +129,7 @@ impl SkeletonAnimation {
         for frame_index in 0..animation.common.frame_count {
             log::trace!("Frame {}", frame_index);
 
-            let limb_data = |r: &mut rom::RomReader, n: u16| {
+            let limb_data = |r: &mut RomReader, n: u16| {
                 if n as i16 >= static_index_max {
                     frame_data(r, frame_index, n)
                 } else {
@@ -141,14 +161,14 @@ impl SkeletonAnimation {
             let mut joints = Vec::new();
             for rot in joint_table.iter().skip(1) {
                 joints.push(Joint {
-                    rotation: Quat::from_mat4(&rotate_zyx(rot[0], rot[1], rot[2])),
+                    rot: Vec3::from_array([rot[0] as _, rot[1] as _, rot[2] as _]),
                 })
             }
 
             frames.push(Frame { joints });
         }
 
-        Ok(Self { frames })
+        Ok(Self { name, frames })
     }
 }
 
@@ -159,5 +179,14 @@ pub struct Frame {
 
 #[derive(Debug, Clone)]
 pub struct Joint {
-    pub rotation: Quat,
+    pub rot: Vec3,
+}
+impl Joint {
+    pub fn rot_quat(&self) -> Quat {
+        Quat::from_mat4(&rotate_zyx(
+            self.rot[0] as _,
+            self.rot[1] as _,
+            self.rot[2] as _,
+        ))
+    }
 }

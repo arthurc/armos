@@ -81,8 +81,8 @@ impl RomReader {
         SegmentIter::new(self, addr)
     }
 
-    pub fn seek(&mut self, frame_data: impl Into<VirtualAddress>) -> &mut Self {
-        self.pos = frame_data.into().into();
+    pub fn seek(&mut self, addr: impl Into<VirtualAddress>) -> &mut Self {
+        self.pos = addr.into().into();
         self
     }
 

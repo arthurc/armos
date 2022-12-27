@@ -136,27 +136,31 @@ pub fn gltf_from_skeleton(header: &SkeletonHeader, r: &mut RomReader) -> Result<
                 // See Skin_ApplyLimbModifications
                 for modif in &animated_limb.limb_modifications {
                     let mut vtx_point = [0.0f32, 0.0f32, 0.0f32];
-                    for transformation in &modif.limb_transformations {
-                        let scale = transformation.scale as f32 * 0.01f32;
-                        let v = [
-                            transformation.pos[0] as f32 * scale,
-                            transformation.pos[1] as f32 * scale,
-                            transformation.pos[2] as f32 * scale,
-                        ];
 
-                        vtx_point[0] += v[0];
-                        vtx_point[1] += v[1];
-                        vtx_point[2] += v[2];
-                    }
+                    if modif.limb_transformations.len() == 1 {
+                    } else {
+                        for transformation in &modif.limb_transformations {
+                            let scale = transformation.scale as f32 * 0.01f32;
+                            let v = [
+                                transformation.pos[0] as f32 * scale,
+                                transformation.pos[1] as f32 * scale,
+                                transformation.pos[2] as f32 * scale,
+                            ];
 
-                    // See Skin_UpdateVertices
-                    for skin_vertex in &modif.skin_vertices {
-                        let mut v = &mut vertex_buffer[skin_vertex.index as usize];
-                        v.pos = [
-                            vtx_point[0] as i16,
-                            vtx_point[1] as i16,
-                            vtx_point[2] as i16,
-                        ];
+                            vtx_point[0] += v[0];
+                            vtx_point[1] += v[1];
+                            vtx_point[2] += v[2];
+                        }
+
+                        // See Skin_UpdateVertices
+                        for skin_vertex in &modif.skin_vertices {
+                            let mut v = &mut vertex_buffer[skin_vertex.index as usize];
+                            v.pos = [
+                                vtx_point[0] as i16,
+                                vtx_point[1] as i16,
+                                vtx_point[2] as i16,
+                            ];
+                        }
                     }
                 }
 
@@ -222,7 +226,7 @@ pub fn gltf_from_skeleton(header: &SkeletonHeader, r: &mut RomReader) -> Result<
 
     for (limb_index, limb) in header.limbs.iter().enumerate() {
         log::info!(
-            "x limb_index: {}, child: {}, sibling: {}",
+            "  - limb_index: {:>2}, child: {:>3}, sibling: {:>3}",
             limb_index,
             limb.child,
             limb.sibling
@@ -247,4 +251,154 @@ pub fn gltf_from_skeleton(header: &SkeletonHeader, r: &mut RomReader) -> Result<
     });
 
     Ok(root)
+}
+
+pub fn add_animation(
+    name: &str,
+    root: &mut json::Root,
+    skeleton_header: &SkeletonHeader,
+    animation: &SkeletonAnimation,
+) -> Result<()> {
+    let times: Vec<f32> = animation
+        .frames
+        .iter()
+        .enumerate()
+        .map(|(i, _)| i as f32 * 0.1)
+        .collect();
+
+    root.buffers.push(json::Buffer {
+        byte_length: mem::size_of_val(&*times) as _,
+        extensions: Default::default(),
+        extras: Default::default(),
+        name: None,
+        uri: Some(format!(
+            "data:application/octet-stream;base64,{}",
+            base64::encode(bytemuck::cast_slice(&times))
+        )),
+    });
+    root.buffer_views.push(json::buffer::View {
+        buffer: json::Index::new(root.buffers.len() as u32 - 1),
+        byte_length: mem::size_of_val(&*times) as _,
+        byte_offset: None,
+        byte_stride: None,
+        extensions: Default::default(),
+        extras: Default::default(),
+        name: None,
+        target: None,
+    });
+
+    root.accessors.push(json::Accessor {
+        buffer_view: Some(json::Index::new(root.buffer_views.len() as u32 - 1)),
+        byte_offset: 0,
+        count: times.len() as u32,
+        component_type: Valid(json::accessor::GenericComponentType(
+            json::accessor::ComponentType::F32,
+        )),
+        extensions: Default::default(),
+        extras: Default::default(),
+        type_: Valid(json::accessor::Type::Scalar),
+        min: times
+            .iter()
+            .fold(None, |a, b| match a {
+                None => Some(*b),
+                Some(a) => Some(a.min(*b)),
+            })
+            .map(|n| json::Value::from(vec![n])),
+        max: times
+            .iter()
+            .fold(None, |a, b| match a {
+                None => Some(*b),
+                Some(a) => Some(a.max(*b)),
+            })
+            .map(|n| json::Value::from(vec![n])),
+        name: None,
+        normalized: false,
+        sparse: None,
+    });
+    let times_accessor_index = root.accessors.len() - 1;
+
+    root.buffers.push(json::Buffer {
+        byte_length: 0,
+        extensions: Default::default(),
+        extras: Default::default(),
+        name: Some(String::from("rotations")),
+        uri: None,
+    });
+    let rotations_buffer_index = root.buffers.len() - 1;
+
+    root.buffer_views.push(json::buffer::View {
+        buffer: json::Index::new(rotations_buffer_index as _),
+        byte_length: 0,
+        byte_offset: None,
+        byte_stride: None,
+        extensions: Default::default(),
+        extras: Default::default(),
+        name: Some(String::from("rotations")),
+        target: None,
+    });
+    let rotations_buffer_view_index = root.buffer_views.len() - 1;
+
+    let mut rotations = Vec::new();
+    let mut samplers = Vec::new();
+    let mut channels = Vec::new();
+    for (limb_index, _) in skeleton_header.limbs.iter().enumerate() {
+        root.accessors.push(json::Accessor {
+            buffer_view: Some(json::Index::new(rotations_buffer_view_index as _)),
+            byte_offset: mem::size_of_val(&*rotations) as _,
+            count: animation.frames.len() as u32,
+            component_type: Valid(json::accessor::GenericComponentType(
+                json::accessor::ComponentType::F32,
+            )),
+            extensions: Default::default(),
+            extras: Default::default(),
+            type_: Valid(json::accessor::Type::Vec4),
+            min: None,
+            max: None,
+            name: Some(String::from("rotations")),
+            normalized: false,
+            sparse: None,
+        });
+        let rotations_accessor_index = root.accessors.len() - 1;
+
+        samplers.push(json::animation::Sampler {
+            input: json::Index::new(times_accessor_index as u32),
+            interpolation: Valid(json::animation::Interpolation::Linear),
+            output: json::Index::new(rotations_accessor_index as u32),
+            extensions: Default::default(),
+            extras: Default::default(),
+        });
+        channels.push(json::animation::Channel {
+            sampler: json::Index::new(samplers.len() as u32 - 1),
+            target: json::animation::Target {
+                node: json::Index::new(limb_index as _),
+                path: Valid(json::animation::Property::Rotation),
+                extensions: Default::default(),
+                extras: Default::default(),
+            },
+            extensions: Default::default(),
+            extras: Default::default(),
+        });
+
+        for frame in &animation.frames {
+            rotations.push(frame.joints[limb_index].rot_quat());
+        }
+    }
+
+    root.buffers[rotations_buffer_index].byte_length = mem::size_of_val(&*rotations) as _;
+    root.buffers[rotations_buffer_index].uri = Some(format!(
+        "data:application/octet-stream;base64,{}",
+        base64::encode(bytemuck::cast_slice(&rotations))
+    ));
+    root.buffer_views[rotations_buffer_view_index].byte_length =
+        root.buffers[rotations_buffer_index].byte_length;
+
+    root.animations.push(json::animation::Animation {
+        samplers,
+        channels,
+        extensions: Default::default(),
+        extras: Default::default(),
+        name: Some(String::from(name)),
+    });
+
+    Ok(())
 }
