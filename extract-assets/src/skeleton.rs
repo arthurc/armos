@@ -157,8 +157,7 @@ pub struct Frame {
     pub joints: Vec<Joint>,
 }
 
-#[derive(Debug, Clone, Copy, Zeroable, Pod)]
-#[repr(C)]
+#[derive(Debug, Clone)]
 pub struct Joint {
     pub rotation: Quat,
 }
