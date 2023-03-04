@@ -12,7 +12,7 @@ pub struct Skin {
     animations: Vec<SkeletonAnimation>,
 }
 impl Skin {
-    pub fn read(r: &mut RomReader, addr: impl Into<VirtualAddress>) -> Result<Self> {
+    pub fn read(r: &mut RomReader, addr: VirtualAddress) -> Result<Self> {
         Ok(Self {
             skeleton_header: SkeletonHeader::read(r.seek(addr))?,
             animations: Vec::new(),
@@ -23,7 +23,7 @@ impl Skin {
         &mut self,
         name: impl Into<String>,
         r: &mut RomReader,
-        addr: impl Into<VirtualAddress>,
+        addr: VirtualAddress,
     ) -> Result<()> {
         let name = name.into();
         log::info!("Reading {}", name);

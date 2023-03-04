@@ -21,14 +21,6 @@ pub enum Segment {
 type E = BigEndian;
 pub type Endian = E;
 
-pub const fn segment_number(addr: u32) -> u32 {
-    (addr << 4) >> 28
-}
-
-pub const fn segment_offset(addr: u32) -> u32 {
-    addr & 0x00FFFFFF
-}
-
 pub trait ReadSegment {
     const SIZE: u32;
 
@@ -38,13 +30,13 @@ pub trait ReadSegment {
 }
 
 pub struct RomReader {
-    pos: u32,
+    pos: VirtualAddress,
     segments: [Option<Vec<u8>>; 16],
 }
 impl RomReader {
     pub fn new() -> Self {
         Self {
-            pos: 0,
+            pos: VirtualAddress::NULL,
             segments: Default::default(),
         }
     }
@@ -81,8 +73,8 @@ impl RomReader {
         SegmentIter::new(self, addr)
     }
 
-    pub fn seek(&mut self, addr: impl Into<VirtualAddress>) -> &mut Self {
-        self.pos = addr.into().into();
+    pub fn seek(&mut self, addr: VirtualAddress) -> &mut Self {
+        self.pos = addr;
         self
     }
 
@@ -122,12 +114,12 @@ impl RomReader {
     }
 
     pub fn read_addr(&mut self) -> Result<VirtualAddress> {
-        Ok(VirtualAddress::new(self.read_u32()?))
+        Ok(VirtualAddress::from(self.read_u32()?))
     }
 
     fn current_segment(&self) -> io::Result<&[u8]> {
-        let number = segment_number(self.pos);
-        let offset = segment_offset(self.pos);
+        let number = self.pos.segment_number();
+        let offset = self.pos.segment_offset();
 
         let data = self.segments[number as usize]
             .as_ref()
@@ -218,8 +210,12 @@ pub struct VirtualAddress(u32);
 impl VirtualAddress {
     pub const NULL: VirtualAddress = VirtualAddress(0);
 
-    pub fn new(addr: u32) -> Self {
-        Self(addr)
+    pub const fn segment_number(&self) -> u32 {
+        (self.0 << 4) >> 28
+    }
+
+    pub const fn segment_offset(&self) -> u32 {
+        self.0 & 0x00FFFFFF
     }
 }
 impl fmt::Display for VirtualAddress {
@@ -232,24 +228,16 @@ impl fmt::Debug for VirtualAddress {
         fmt::Display::fmt(self, f)
     }
 }
-impl From<VirtualAddress> for u32 {
-    fn from(item: VirtualAddress) -> Self {
-        item.0
-    }
-}
 impl From<u32> for VirtualAddress {
     fn from(item: u32) -> Self {
-        Self::new(item)
+        Self(item)
     }
 }
-impl<T> ops::Add<T> for VirtualAddress
-where
-    T: Into<u32>,
-{
+impl ops::Add<i32> for VirtualAddress {
     type Output = Self;
 
-    fn add(self, rhs: T) -> Self::Output {
-        Self::new(self.0 + rhs.into())
+    fn add(self, rhs: i32) -> Self::Output {
+        Self(((self.0 as i32) + rhs) as u32)
     }
 }
 impl<T> ops::AddAssign<T> for VirtualAddress

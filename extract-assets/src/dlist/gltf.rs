@@ -55,7 +55,7 @@ impl<'a> Interpreter<'a> {
             Opcode::VTX => {
                 let nn = ((data & 0x000FF00000000000u64) >> 44) as u32;
                 let aa = ((data & 0x000000FF00000000u64) >> 32) as u32;
-                let addr = VirtualAddress::new(data as u32);
+                let addr = VirtualAddress::from(data as u32);
 
                 log::trace!(
                     "VTX nn: {} aa: {} (aa >> 1) - nn: {} addr: {}",

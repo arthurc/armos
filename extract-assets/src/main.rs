@@ -1,4 +1,4 @@
-use crate::rom::RomReader;
+use crate::rom::{RomReader, VirtualAddress};
 use anyhow::{Context, Result};
 use std::{fs, path::PathBuf};
 
@@ -19,9 +19,17 @@ fn main() -> Result<()> {
     // object_horse
     reader.set_segment_from(rom::Segment::Object, rom_file, (0x010DB000, 0x010E8F10))?;
 
-    let mut epona = skin::Skin::read(&mut reader, 0x06009D74)?;
-    epona.read_animation("gEponaGallopingAnim", &mut reader, 0x06001E2C)?;
-    epona.read_animation("gEponaJumpingAnim", &mut reader, 0x06002470)?;
+    let mut epona = skin::Skin::read(&mut reader, VirtualAddress::from(0x06009D74))?;
+    epona.read_animation(
+        "gEponaGallopingAnim",
+        &mut reader,
+        VirtualAddress::from(0x06001E2C),
+    )?;
+    epona.read_animation(
+        "gEponaJumpingAnim",
+        &mut reader,
+        VirtualAddress::from(0x06002470),
+    )?;
 
     let root = epona.to_gltf(&mut reader)?;
     let writer = fs::File::create("skeleton.gltf").expect("I/O error");

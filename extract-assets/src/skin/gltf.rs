@@ -123,8 +123,11 @@ fn create_mesh(root: &mut json::Root, vertices: Vec<Vertex>, indices: Vec<u32>) 
     root.meshes.len() as u32 - 1
 }
 
+// See Skin_DrawImpl
 pub fn gltf_from_skeleton(header: &SkeletonHeader, r: &mut RomReader) -> Result<json::Root> {
     let mut root: json::Root = Default::default();
+
+    // TODO: Skin_ApplyAnimTransformations
 
     for limb in &header.limbs {
         let mut mesh = None;
