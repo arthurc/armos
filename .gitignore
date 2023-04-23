@@ -2,3 +2,4 @@
 **/*.z64
 **/*.swp
 **/*.gltf
+.DS_Store
