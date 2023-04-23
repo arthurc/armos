@@ -1,250 +1,252 @@
 use std::{
-    fmt,
-    io::{self, Read, Seek, SeekFrom},
-    marker::PhantomData,
-    mem, ops,
+    fmt::Debug,
+    io,
+    ops::{Deref, Range},
 };
 
-use anyhow::Result;
-use byteorder::{BigEndian, ReadBytesExt};
+use anyhow::{Context, Result};
+use num_derive::FromPrimitive;
+use zerocopy::{AsBytes, BigEndian, FromBytes, LayoutVerified};
+
+use crate::addr::{RawVirtAddr, VirtAddr};
 
 pub enum Segment {
-    Scene = 2,
-    Room = 3,
-    Keep = 4,
-    FieldDungeonKeep = 5,
+    _Scene = 2,
+    _Room = 3,
+    _Keep = 4,
+    _FieldDungeonKeep = 5,
     Object = 6,
-    LinkAnimation = 7,
+    _LinkAnimation = 7,
     IconItemStatic = 8,
 }
 
-type E = BigEndian;
-pub type Endian = E;
-
-pub trait ReadSegment {
-    const SIZE: u32;
-
-    fn read(r: &mut RomReader) -> Result<Self>
-    where
-        Self: Sized;
+#[derive(FromPrimitive)]
+pub enum SkinLimbType {
+    Animated = 4,
+    Normal = 11,
 }
 
-pub struct RomReader {
-    pos: VirtualAddress,
+#[derive(Default, Clone)]
+pub struct Reader {
     segments: [Option<Vec<u8>>; 16],
 }
-impl RomReader {
+impl Reader {
     pub fn new() -> Self {
-        Self {
-            pos: VirtualAddress::NULL,
-            segments: Default::default(),
-        }
+        Self::default()
+    }
+
+    pub fn read_segment<R: io::Read + io::Seek>(
+        &mut self,
+        segment: Segment,
+        r: &mut R,
+        range: Range<u32>,
+    ) -> Result<()> {
+        let mut buf = vec![0u8; range.len()];
+        r.seek(io::SeekFrom::Start(range.start as u64))?;
+        r.read_exact(&mut buf)?;
+
+        self.set_segment(segment, Some(buf));
+
+        Ok(())
     }
 
     pub fn set_segment(&mut self, segment: Segment, data: Option<Vec<u8>>) {
         self.segments[segment as usize] = data;
     }
 
-    pub fn set_segment_from(
-        &mut self,
-        segment: Segment,
-        mut r: (impl Read + Seek),
-        range: (u32, u32),
-    ) -> Result<()> {
-        let mut buf = vec![0u8; (range.1 - range.0) as usize];
-        r.seek(SeekFrom::Start(range.0 as _))?;
-        r.read_exact(&mut buf)?;
-
-        self.set_segment(segment, Some(buf));
-        Ok(())
-    }
-
-    pub fn ptr_segment_iter<T>(&mut self, addr: VirtualAddress) -> PtrSegmentIter<T>
+    pub fn read<T>(&self, addr: VirtAddr<T>) -> Result<T>
     where
-        T: ReadSegment,
+        T: FromBytes,
     {
-        PtrSegmentIter::new(self, addr)
+        log::trace!("Reading struct at {}", addr);
+        let (lv, _) = LayoutVerified::<_, T>::new_from_prefix(self.slice_from(addr.into())?)
+            .with_context(|| format!("Failed to read item from address {}", addr))?;
+
+        Ok(lv.read())
     }
 
-    pub fn segment_iter<T>(&mut self, addr: VirtualAddress) -> SegmentIter<T>
+    pub fn read_slice<T>(&self, addr: VirtAddr<T>, count: usize) -> Result<&[T]>
     where
-        T: ReadSegment,
+        T: FromBytes,
     {
-        SegmentIter::new(self, addr)
+        log::trace!("Reading slice of count {} at {}", count, addr);
+        let (lv, _) =
+            LayoutVerified::<_, [T]>::new_slice_from_prefix(self.slice_from(addr.into())?, count)
+                .with_context(|| format!("Failed to read slice at {}", addr))?;
+
+        Ok(lv.into_slice())
     }
 
-    pub fn seek(&mut self, addr: VirtualAddress) -> &mut Self {
-        self.pos = addr;
-        self
-    }
-
-    pub fn read_u8(&mut self) -> io::Result<u8> {
-        ReadBytesExt::read_u8(self)
-    }
-
-    pub fn read_u16(&mut self) -> io::Result<u16> {
-        ReadBytesExt::read_u16::<E>(self)
-    }
-
-    pub fn read_u32(&mut self) -> io::Result<u32> {
-        ReadBytesExt::read_u32::<E>(self)
-    }
-
-    pub fn read_u64(&mut self) -> io::Result<u64> {
-        ReadBytesExt::read_u64::<E>(self)
-    }
-
-    pub fn read_i8(&mut self) -> io::Result<i8> {
-        ReadBytesExt::read_i8(self)
-    }
-
-    pub fn read_i16(&mut self) -> io::Result<i16> {
-        ReadBytesExt::read_i16::<E>(self)
-    }
-
-    pub fn read_i32(&mut self) -> io::Result<i32> {
-        ReadBytesExt::read_i32::<E>(self)
-    }
-
-    pub fn read_segment<T>(&mut self) -> Result<T>
+    pub fn ptr_slice_iter<'a, T>(
+        &'a self,
+        addr: VirtAddr<VirtAddr<T>>,
+        count: usize,
+    ) -> Result<impl Iterator<Item = T> + 'a>
     where
-        T: ReadSegment,
+        T: FromBytes + 'a,
     {
-        Ok(T::read(self)?)
+        self.read_slice(addr, count).map(|addrs| {
+            addrs
+                .into_iter()
+                .flat_map(|addr| self.read::<T>(*addr).into_iter())
+        })
     }
 
-    pub fn read_addr(&mut self) -> Result<VirtualAddress> {
-        Ok(VirtualAddress::from(self.read_u32()?))
-    }
+    pub fn slice_from(&self, addr: RawVirtAddr) -> Result<&[u8]> {
+        let number = addr.segment_number();
+        let offset = addr.segment_offset();
 
-    fn current_segment(&self) -> io::Result<&[u8]> {
-        let number = self.pos.segment_number();
-        let offset = self.pos.segment_offset();
-
-        let data = self.segments[number as usize]
+        self.segments[number as usize]
             .as_ref()
-            .ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))?;
-
-        Ok(&data[offset as usize..])
+            .map(|data| &data[offset as usize..])
+            .with_context(|| format!("Segment {} has not been set", number))
     }
 }
 
-impl Read for RomReader {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let n = self
-            .current_segment()
-            .expect("Unexpected segment")
-            .read(buf)?;
-        self.pos += n as u32;
-        Ok(n)
-    }
-}
+type U16 = zerocopy::U16<BigEndian>;
+const _: () = assert!(std::mem::size_of::<U16>() == 0x02);
+type I16 = zerocopy::I16<BigEndian>;
+const _: () = assert!(std::mem::size_of::<I16>() == 0x02);
+type I32 = zerocopy::I32<BigEndian>;
+const _: () = assert!(std::mem::size_of::<I32>() == 0x04);
 
-pub struct PtrSegmentIter<'a, T> {
-    r: &'a mut RomReader,
-    pos: VirtualAddress,
-    _marker: PhantomData<T>,
-}
-impl<'a, T> PtrSegmentIter<'a, T> {
-    fn new(r: &'a mut RomReader, addr: VirtualAddress) -> Self {
-        Self {
-            r,
-            pos: addr,
-            _marker: PhantomData,
-        }
-    }
-}
-impl<T> Iterator for PtrSegmentIter<'_, T>
+type Gfx = RawVirtAddr;
+
+#[derive(FromBytes)]
+#[repr(C, align(4))]
+pub struct Aligned4<T>(T);
+impl<T> Debug for Aligned4<T>
 where
-    T: ReadSegment,
+    T: Debug,
 {
-    type Item = Result<T>;
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+impl<T> Deref for Aligned4<T> {
+    type Target = T;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        // Seek to pointer table
-        self.r.seek(self.pos);
-
-        // Read the next pointer and seek to it,
-        // i.e. where the data is stored
-        let addr = self.r.read_addr().ok()?;
-        log::trace!("Reading pointer segment @ {}->{}", self.pos, addr);
-        self.r.seek(addr);
-
-        self.pos += mem::size_of::<u32>() as u32;
-
-        Some(T::read(self.r))
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
-pub struct SegmentIter<'a, T> {
-    r: &'a mut RomReader,
-    addr: VirtualAddress,
-    _marker: PhantomData<T>,
-}
-impl<'a, T> SegmentIter<'a, T> {
-    fn new(r: &'a mut RomReader, addr: VirtualAddress) -> Self {
-        Self {
-            addr,
-            r,
-            _marker: PhantomData,
-        }
-    }
-}
-impl<T> Iterator for SegmentIter<'_, T>
+#[derive(FromBytes)]
+#[repr(C, align(2))]
+pub struct Aligned2<T>(T);
+impl<T> Debug for Aligned2<T>
 where
-    T: ReadSegment,
+    T: Debug,
 {
-    type Item = Result<T>;
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+impl<T> Deref for Aligned2<T> {
+    type Target = T;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        self.r.seek(self.addr);
-        log::trace!("Reading segment @ {}", self.addr);
-        self.addr += T::SIZE;
-
-        Some(T::read(self.r))
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
-#[derive(Copy, Clone, PartialEq)]
-pub struct VirtualAddress(u32);
-impl VirtualAddress {
-    pub const NULL: VirtualAddress = VirtualAddress(0);
+#[derive(Debug, FromBytes)]
+#[repr(C)]
+pub struct SkeletonHeader {
+    pub limbs: VirtAddr<VirtAddr<SkinLimb>>,
+    pub limb_count: u8,
+}
 
-    pub const fn segment_number(&self) -> u32 {
-        (self.0 << 4) >> 28
-    }
+#[derive(Debug, FromBytes)]
+#[repr(C)]
+pub struct SkinLimb {
+    pub joint_pos: [I16; 3],
+    pub child: u8,
+    pub sibling: u8,
+    pub segment_type: I32,
 
-    pub const fn segment_offset(&self) -> u32 {
-        self.0 & 0x00FFFFFF
-    }
+    /// Gfx* if segmentType is SKIN_LIMB_TYPE_NORMAL,
+    /// SkinAnimatedLimbData* if segmentType is SKIN_LIMB_TYPE_ANIMATED,
+    /// NULL otherwise
+    pub segment: RawVirtAddr,
 }
-impl fmt::Display for VirtualAddress {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "0x{:08X}", self.0)
-    }
-}
-impl fmt::Debug for VirtualAddress {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(self, f)
-    }
-}
-impl From<u32> for VirtualAddress {
-    fn from(item: u32) -> Self {
-        Self(item)
-    }
-}
-impl ops::Add<i32> for VirtualAddress {
-    type Output = Self;
+const _: () = assert!(std::mem::size_of::<SkinLimb>() == 0x10);
 
-    fn add(self, rhs: i32) -> Self::Output {
-        Self(((self.0 as i32) + rhs) as u32)
-    }
+#[derive(Debug, FromBytes)]
+#[repr(C)]
+pub struct SkinAnimatedLimbData {
+    pub total_vtx_count: U16,
+    pub limb_modif_count: U16,
+    pub limb_modifications: VirtAddr<SkinLimbModif>,
+    pub dlist: Gfx,
 }
-impl<T> ops::AddAssign<T> for VirtualAddress
-where
-    T: Into<u32>,
-{
-    fn add_assign(&mut self, rhs: T) {
-        self.0 += rhs.into()
-    }
+const _: () = assert!(std::mem::size_of::<SkinAnimatedLimbData>() == 0xC);
+
+#[derive(Debug, AsBytes, FromBytes, Default, Clone)]
+#[repr(C)]
+pub struct Vtx {
+    pub pos: [I16; 3],
+    pub flag: I16,
+    pub tpos: [I16; 2],
+    pub cn: [u8; 4],
 }
+
+#[derive(FromBytes, Debug)]
+#[repr(C)]
+pub struct SkinLimbModif {
+    pub vtx_count: U16,
+    pub transform_count: U16,
+    pub unk_4: Aligned4<U16>,
+    pub skin_vertices: VirtAddr<SkinVertex>,
+    pub limb_transformations: VirtAddr<SkinTransformation>,
+}
+const _: () = assert!(std::mem::size_of::<SkinLimbModif>() == 0x10);
+
+#[derive(FromBytes)]
+#[repr(C)]
+pub struct SkinTransformation {
+    pub limb_index: Aligned2<u8>,
+    pub x: I16,
+    pub y: I16,
+    pub z: I16,
+    pub scale: u8,
+}
+const _: () = assert!(std::mem::size_of::<SkinTransformation>() == 0xA);
+
+#[derive(FromBytes)]
+#[repr(C)]
+pub struct SkinVertex {
+    pub index: U16,
+    pub s: I16,
+    pub t: I16,
+    pub norm_x: i8,
+    pub norm_y: i8,
+    pub norm_z: i8,
+    pub alpha: u8,
+}
+const _: () = assert!(std::mem::size_of::<SkinVertex>() == 0xA);
+
+#[derive(FromBytes, Debug)]
+#[repr(C)]
+pub struct AnimationHeaderCommon {
+    pub frame_count: Aligned4<I16>,
+}
+
+#[derive(FromBytes, Debug)]
+#[repr(C)]
+pub struct AnimationHeader {
+    pub common: AnimationHeaderCommon,
+    pub frame_data: VirtAddr<I16>,
+    pub joint_indicies: VirtAddr<JointIndex>,
+    pub static_index_max: Aligned4<U16>,
+}
+const _: () = assert!(std::mem::size_of::<AnimationHeader>() == 0x10);
+
+#[derive(FromBytes)]
+#[repr(C)]
+pub struct JointIndex {
+    pub x: U16,
+    pub y: U16,
+    pub z: U16,
+}
+const _: () = assert!(std::mem::size_of::<JointIndex>() == 0x06);

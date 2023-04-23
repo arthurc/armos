@@ -1,49 +1,57 @@
-use crate::rom::{RomReader, VirtualAddress};
-use anyhow::{Context, Result};
 use std::{fs, path::PathBuf};
 
-mod dlist;
-mod n64;
+use anyhow::{Context, Result};
+use gltf::json;
+
+use crate::addr::RawVirtAddr;
+
+mod addr;
+mod display_list;
+mod math;
+mod mesh;
 mod rom;
-mod skin;
+mod skeleton;
+mod skeleton_animation;
 
 fn main() -> Result<()> {
     pretty_env_logger::init();
 
     let rom_path = get_rom_path()?;
-    log::info!("Extracting assets from ROM file: {}", rom_path.display());
+    let mut rom_file = fs::File::open(rom_path)?;
 
-    let rom_file = fs::File::open(rom_path)?;
+    let mut reader = rom::Reader::new();
+    reader.read_segment(rom::Segment::Object, &mut rom_file, 0x010DB000..0x010E8F10)?;
 
-    let mut reader = RomReader::new();
-    // object_horse
-    reader.set_segment_from(rom::Segment::Object, rom_file, (0x010DB000, 0x010E8F10))?;
-
-    let mut epona = skin::Skin::read(&mut reader, VirtualAddress::from(0x06009D74))?;
-    epona.read_animation(
-        "gEponaGallopingAnim",
-        &mut reader,
-        VirtualAddress::from(0x06001E2C),
-    )?;
-    epona.read_animation(
-        "gEponaJumpingAnim",
-        &mut reader,
-        VirtualAddress::from(0x06002470),
+    let mut root = gltf::json::Root::default();
+    skeleton::read_into_gltf(
+        &mut root,
+        &reader,
+        RawVirtAddr::new(0x06009D74).into(),
+        &[
+            // gEponaGallopingAnim
+            RawVirtAddr::new(0x06001E2C).into(),
+            // gEponaJumpingAnim
+            RawVirtAddr::new(0x06002470).into(),
+        ],
     )?;
 
-    let root = epona.to_gltf(&mut reader)?;
-    let writer = fs::File::create("skeleton.gltf").expect("I/O error");
-    gltf::json::serialize::to_writer_pretty(writer, &root).expect("Serialization error");
+    root.scenes.push(json::Scene {
+        extensions: Default::default(),
+        extras: Default::default(),
+        name: None,
+        nodes: vec![json::Index::new(0)],
+    });
+
+    let writer = fs::File::create("epona.gltf")?;
+    gltf::json::serialize::to_writer_pretty(writer, &root)?;
 
     Ok(())
 }
 
 fn get_rom_path() -> Result<PathBuf> {
-    let rom_path = glob::glob("*.z64")
+    Ok(glob::glob("*.z64")
         .expect("Failed to read glob pattern")
         .next()
         .with_context(|| "No ROM found")?
-        .expect("Glob error");
-
-    Ok(rom_path)
+        .expect("Glob error"))
 }

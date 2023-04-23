@@ -6,12 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.66"
-base64 = "0.13.1"
-bytemuck = { version = "1", features = ["derive"] }
-byteorder = "1"
-glam = { version = "0.22.0", features = ["bytemuck"] }
+anyhow = "1"
+base64 = "0.21.0"
+glam = "0.23.0"
 glob = "0.3"
-gltf = "1.0.0"
+gltf = "1.1"
 log = "0.4"
+num-derive = "0.3"
+num-traits = "0.2"
 pretty_env_logger = "0.4"
+zerocopy = "0.6"
